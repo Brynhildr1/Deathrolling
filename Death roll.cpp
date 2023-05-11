@@ -2,10 +2,11 @@
 #include <fstream>
 #include <string>
 #include <limits>
+#include <iomanip>
+#include <cctype>
 
 using namespace std;
 
-// Function to check if an account exists
 bool accountExists(char accountLetter)
 {
     ifstream file("Accounts.txt");
@@ -20,21 +21,15 @@ bool accountExists(char accountLetter)
     return false;
 }
 
-// Function to create a new account
-void createAccount(char accountLetter)
+bool validatePin(const string &pin)
 {
-    ofstream file("Accounts.txt", ios_base::app);
-    file << accountLetter << " 1234 1000\n"; //  pin of 1234 and default starting balance of $1000
-    file.close();
-}
-
-// Function to validate a 4-digit pin
-bool validatePin(string pin)
-{
-    if (pin.length() != 4)
+    // checking if input is exactly 4 characters long
+    if (pin.size() != 4)
     {
         return false;
     }
+
+    // check if each character is a digit
     for (char c : pin)
     {
         if (!isdigit(c))
@@ -42,113 +37,152 @@ bool validatePin(string pin)
             return false;
         }
     }
+
+    // if all checks pass, the input is valid
     return true;
 }
 
-// Function to prompt user for account creation and validate input
-char promptForAccountCreation()
+char getAccountLetter()
 {
-    char createAccount;
-    do
+    string accountInput;
+    char accountLetter;
+    int pin;
+
+    while (true) // Loop until a valid account letter is entered or the user chooses to quit
     {
-        cout << "Account does not exist. Create an account? (Y/N): ";
-        cin >> createAccount;
-        if (createAccount == 'Y' || createAccount == 'y' || createAccount == 'N' || createAccount == 'n')
+        cout << "Enter Account Letter (A - Z): ";
+        cin >> accountInput;
+
+        // check length of input
+        if (accountInput.length() != 1)
         {
-            break;
+            cout << "Invalid input. Please enter a single uppercase letter." << endl;
+            continue; // recursively call the function to get a valid input
         }
-        else
+
+        // check that first character is a uppercase letter
+        accountLetter = accountInput[0];
+        if (accountLetter < 'A' || accountLetter > 'Z')
         {
-            cout << "Invalid input. Please enter Y or N: ";
-            cin.clear();                                         // clear the input stream
-            cin.ignore(numeric_limits<streamsize>::max(), '\n'); // ignore any remaining characters in the input buffer
+            cout << "Invalid input. Please enter a single uppercase letter." << endl;
+            continue; // recursively call the function to get a valid input
         }
-    } while (true);
-    return createAccount;
-}
 
-// Main function
-int main()
-{
-    char account;
-    string pin;
-    int balance = 1000;
+        // check is account exists
+        bool accountExistsFlag = accountExists(accountLetter);
 
-    while (true)
-    {
-        cout << "Enter your account (A/B/C/D): ";
-        cin >> account;
-
-        ifstream accountsFile("Accounts.txt");
-        bool accountExists = false;
-
-        if (accountsFile.is_open())
+        if (!accountExistsFlag) // if the account doesnt exist then it will prompt the user to create one
         {
-            string line;
-            while (getline(accountsFile, line))
+            bool invalidInput = false;
+            char createAccountFlag;
+            cout << "Player account does not exist. Create an account? (Y/N): ";
+            while (true)
             {
-                if (line[0] == account)
+                cin >> createAccountFlag;
+                if (createAccountFlag == 'Y' || createAccountFlag == 'y' || createAccountFlag == 'N' || createAccountFlag == 'n')
                 {
-                    accountExists = true;
-                    int tries = 0;
-                    while (tries < 3)
-                    {
-                        cout << "Enter your pin: ";
-                        cin >> pin;
-                        if (line.substr(1, 4) == pin) // compare only the first 4 characters
-                        {
-                            cout << "Login successful" << endl;
-                            balance = stoi(line.substr(7, 4)); // extract 4 characters starting from the 8th character
-                            break;
-                        }
-                        else
-                        {
-                            cout << "Pin is incorrect. Please re-enter your pin." << endl;
-                            tries++;
-                        }
-                    }
-                    if (tries == 3)
-                    {
-                        cout << "Maximum number of attempts reached. Please try again." << endl;
-                        break;
-                    }
-                    else
-                    {
-                        break;
-                    }
+                    break;
                 }
+                cout << "Invalid input. Please enter 'Y' or 'N': ";
+                cin.clear();
+                cin.ignore(numeric_limits<streamsize>::max(), '\n');
             }
-            accountsFile.close();
-        }
-
-        if (!accountExists)
-        {
-            char createAccount = promptForAccountCreation();
-            if (createAccount == 'Y' || createAccount == 'y')
+            if (createAccountFlag == 'Y' || createAccountFlag == 'y')
             {
                 cout << "Enter a 4-digit pin: ";
                 cin >> pin;
-                while (!validatePin(pin) || pin.length() != 4)
+                while (!validatePin(to_string(pin))) // validate the entered pin, as 4 digits long and all numbers
                 {
                     cout << "Invalid pin. Enter a 4-digit pin: ";
                     cin >> pin;
                 }
+                // write the newly created account to Accounts.txt
                 ofstream accountsFile("Accounts.txt", ios::app);
-                accountsFile << account << pin << " 1000 " << endl;
+                accountsFile << accountLetter << pin << " 1000 " << endl;
                 accountsFile.close();
                 cout << "Account created successfully" << endl;
-            }
-            else if (createAccount == 'N' || createAccount == 'n')
-            {
-                cout << "Returning" << endl;
-                continue;
+                break;
             }
             else
             {
-                cout << "Invalid input. Please try again." << endl;
+                cout << "restarting\n\n";
+                continue; // start another iteration of the loop to ask for a new account letter.
             }
         }
+
+        // Get/Validate Pin
+        int numTries = 0;
+        double balance;
+
+        ifstream file;
+        file.open("Accounts.txt");
+        string line;
+        bool authenticated = false;
+        while (getline(file, line) && numTries < 3)
+        {
+            if (line[0] == accountLetter)
+            {
+                cout << "Enter pin: ";
+                cin >> pin;
+                if (line.substr(1, 4) == to_string(pin))
+                {
+                    authenticated = true;
+                    balance = stoi(line.substr(7));
+                    continue;
+                }
+                else
+                {
+                    cout << "Pin is incorrect\n";
+                    numTries++;
+                    file.clear();
+                    file.seekg(0, ios::beg);
+                }
+            }
+        }
+        if (!authenticated)
+        {
+            cout << "Maximum number of attempts exceeded, Returning to Account select.\n\n";
+            continue;
+        }
+
+        // Break out of the loop and return the account letter if it exists
+        break;
     }
+
+    return accountLetter;
+}
+
+int main()
+{
+    // Get user 1 account Letter
+    cout << "Player 1:\n";
+    char account1 = getAccountLetter();
+    cout << "Player 1 Account: " << account1 << ", Login successful\n\n";
+
+    // Get user 2 / Check if account is already logged in
+    char account2;
+
+    bool uniqueValidation = false;
+    while (!uniqueValidation)
+    {
+        cout << "player 2:\n";
+        account2 = getAccountLetter();
+        if (account2 != account1)
+        {
+            uniqueValidation = true; // if the same account isnt used then the validation will be true and continue
+            continue;
+        }
+        else
+        {
+            cout << "Account: " << account2 << " is already logged in.\n"; // if the same account is used
+            cout << "Reissuing task.\n\n";
+        }
+    }
+
+    cout << "Player 2 Account: " << account2 << ", Login successful\n\n";
+
+    int x;
+    cin >> x;
 
     return 0;
 }
