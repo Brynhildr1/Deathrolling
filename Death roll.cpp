@@ -4,6 +4,9 @@
 #include <limits>
 #include <iomanip>
 #include <cctype>
+#include <unistd.h>
+#include <cstdlib>
+#include <ctime>
 
 using namespace std;
 
@@ -42,11 +45,20 @@ bool validatePin(const string &pin)
     return true;
 }
 
-char getAccountLetter()
+struct AccountInfo
 {
+    char accountLetter;
+    double balance;
+};
+
+AccountInfo getAccountLetter()
+{
+    AccountInfo accountInfo;
+
     string accountInput;
     char accountLetter;
     int pin;
+    double balance = 0.0;
 
     while (true) // Loop until a valid account letter is entered or the user chooses to quit
     {
@@ -110,9 +122,8 @@ char getAccountLetter()
             }
         }
 
-        // Get/Validate Pin
+        // Get / Validate Pin
         int numTries = 0;
-        double balance;
 
         ifstream file;
         file.open("Accounts.txt");
@@ -127,12 +138,21 @@ char getAccountLetter()
                 if (line.substr(1, 4) == to_string(pin))
                 {
                     authenticated = true;
-                    balance = stoi(line.substr(7));
+
+                    // Find the position of the space after the balance value
+                    size_t spacePos = line.find(' ', 6);
+
+                    // Extract the balance substring from the line
+                    string balanceSubstring = line.substr(6, spacePos - 6);
+
+                    // Convert the balance substring to an integer
+                    balance = stoi(balanceSubstring);
+
                     continue;
                 }
                 else
                 {
-                    cout << "Pin is incorrect\n";
+                    cout << "\nPin is incorrect\n";
                     numTries++;
                     file.clear();
                     file.seekg(0, ios::beg);
@@ -149,40 +169,285 @@ char getAccountLetter()
         break;
     }
 
-    return accountLetter;
+    // return the account letter and its balance to the main function using a struct
+    accountInfo.accountLetter = accountLetter;
+    accountInfo.balance = balance;
+
+    return accountInfo;
+}
+
+// Function to update the account balance in Accounts.txt
+void updateAccountBalance(char accountLetter, double newBalance)
+{
+    ifstream inFile("Accounts.txt");
+    ofstream outFile("temp.txt");
+
+    string line;
+    while (getline(inFile, line))
+    {
+        if (line[0] == accountLetter)
+        {
+            // Find the position of the space after the account letter
+            size_t spacePos = line.find(' ');
+
+            // Construct the updated line with the new balance
+            string updatedLine = line.substr(0, spacePos + 1) + to_string(static_cast<int>(newBalance));
+
+            // Write the updated line to the temporary file
+            outFile << updatedLine << endl;
+        }
+        else
+        {
+            // Write the unchanged line to the temporary file
+            outFile << line << endl;
+        }
+    }
+
+    inFile.close();
+    outFile.close();
+
+    // Replace the original file with the updated one
+    remove("Accounts.txt");
+    rename("temp.txt", "Accounts.txt");
 }
 
 int main()
 {
+    // Initialize the random number generator
+    srand(static_cast<unsigned int>(time(nullptr)));
+
     // Get user 1 account Letter
     cout << "Player 1:\n";
-    char account1 = getAccountLetter();
-    cout << "Player 1 Account: " << account1 << ", Login successful\n\n";
+
+    AccountInfo account1Info = getAccountLetter();
+    char account1 = account1Info.accountLetter;
+    double balance1 = account1Info.balance;
+    cout << "\nPlayer 1 Account: " << account1 << ", Login successful\n";
+    cout << "Current account " << account1 << " balance: " << balance1 << "\n\n";
 
     // Get user 2 / Check if account is already logged in
     char account2;
+    double balance2;
 
     bool uniqueValidation = false;
-    while (!uniqueValidation)
+    do
     {
-        cout << "player 2:\n";
-        account2 = getAccountLetter();
+        cout << "Player 2:\n";
+        AccountInfo account2Info = getAccountLetter();
+        account2 = account2Info.accountLetter;
+        balance2 = account2Info.balance;
         if (account2 != account1)
         {
-            uniqueValidation = true; // if the same account isnt used then the validation will be true and continue
-            continue;
+            uniqueValidation = true;
         }
         else
         {
-            cout << "Account: " << account2 << " is already logged in.\n"; // if the same account is used
+            cout << "Account: " << account2 << " is already logged in.\n";
             cout << "Reissuing task.\n\n";
         }
+    } while (!uniqueValidation);
+
+    cout << "\nPlayer 2 Account: " << account2 << ", Login successful\n";
+    cout << "Current balance: " << balance2 << "";
+
+    double bet;
+    bool replay = true;
+    // bet agreement between players and roll
+    while (replay == true)
+    {
+        /* ask player 1 bet
+        check if bet is valid (number/within balance)
+        confirm bet with player 2
+        if yes, roll
+
+        if no, ask player 2 bet
+        check if bet is valid (number/within balance)
+        confirm bet with player 1
+        if yes, roll
+
+        if no, loop */
+
+        // ask player 1 bet
+        cout << "\n\nPlayer " << account1 << ": Enter Bet ($): "; // ask and input p1 bet
+        cin >> bet;
+
+        // validate that p1 bet is a number and within the balance of both players, if not error and loop.
+        while (cin.fail() || bet > balance1 || bet > balance2)
+        {
+            cout << "\nInvalid bet. Please enter a valid numeric value within player balances.\nPlayer " << account1 << ": " << balance1 << ", Player " << account2 << ": " << balance2 << "\n\nPlayer " << account1 << " Enter Bet ($): ";
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cin >> bet;
+        }
+
+        // confirm bet with player2
+        char betConfirmation;
+        cout << "\nPlayer " << account2 << ", Do you want to match the bet ($): " << bet << "? (Y/N): ";
+        while (true) // ensure user input is either Yy, Nn.
+        {
+            cin >> betConfirmation;
+            if (betConfirmation == 'Y' || betConfirmation == 'y' || betConfirmation == 'N' || betConfirmation == 'n')
+            {
+                break;
+            }
+            cout << "Invalid input. Please enter 'Y' or 'N': ";
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        }
+        if (betConfirmation == 'Y' || betConfirmation == 'y')
+        {
+            // *Roll*
+            int roll = bet * 10;
+            cout << "Begin Deathrolling from: " << roll << "\n\n";
+
+            while (true)
+            {
+                // Player 1's turn
+                cout << "Player " << account1 << " rolls from: " << roll;
+                roll = rand() % roll + 1;
+                cout << ", rolling: " << roll << endl;
+
+                if (roll == 1)
+                {
+                    cout << "Player " << account2 << " wins ($): " << bet << "\n\n";
+                    // balance updates
+                    balance1 -= bet;
+                    balance2 += bet;
+                    cout << "New account balances are:\n"
+                         << "Player " << account1 << ": " << balance1 << "\nPlayer " << account2 << ": " << balance2;
+                    break;
+                }
+
+                sleep(1); // introduce a 1-second delay
+
+                // Player 2's turn
+                cout << "Player " << account2 << " rolls from: " << roll;
+                roll = rand() % roll + 1;
+                cout << ", rolling: " << roll << endl;
+
+                if (roll == 1)
+                {
+                    cout << "Player " << account1 << " wins ($): " << bet << "\n\n";
+                    // balance updates
+                    balance1 += bet;
+                    balance2 -= bet;
+                    cout << "New account balances are:\n"
+                         << "Player " << account1 << ": " << balance1 << "\nPlayer " << account2 << ": " << balance2;
+                    break;
+                }
+
+                sleep(1); // introduce a 1-second delay
+            }
+            updateAccountBalance(account1, balance1);
+            updateAccountBalance(account2, balance2);
+        }
+        else
+        {
+            // ask for player 2 bet
+            cout << "Player " << account2 << ": Enter Bet ($): "; // ask and input p1 bet
+            cin >> bet;
+
+            // validate that p1 bet is a number and within the balance of both players, if not error and loop.
+            while (cin.fail() || bet > balance1 || bet > balance2)
+            {
+                cout << "\nInvalid bet. Please enter a valid numeric value within player balances.\nPlayer " << account1 << ": " << balance1 << ", Player " << account2 << ": " << balance2 << "\n\nPlayer " << account2 << " Enter Bet ($): ";
+                cin.clear();
+                cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                cin >> bet;
+            }
+
+            // confirm bet with player2
+            char betConfirmation;
+            cout << "\nPlayer " << account1 << ", Do you want to match the bet ($): " << bet << "? (Y/N): ";
+            while (true) // ensure user input is either Yy, Nn.
+            {
+                cin >> betConfirmation;
+                if (betConfirmation == 'Y' || betConfirmation == 'y' || betConfirmation == 'N' || betConfirmation == 'n')
+                {
+                    break;
+                }
+                cout << "Invalid input. Please enter 'Y' or 'N': ";
+                cin.clear();
+                cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            }
+            if (betConfirmation == 'Y' || betConfirmation == 'y')
+            {
+                // *Roll*
+                int roll = bet * 10;
+                cout << "Begin Deathrolling from: " << roll << "\n\n";
+
+                while (true)
+                {
+                    // Player 2's turn
+                    cout << "Player " << account2 << " rolls from: " << roll;
+                    roll = rand() % roll + 1;
+                    cout << ", rolling: " << roll << endl;
+
+                    if (roll == 1)
+                    {
+                        cout << "Player " << account1 << " wins ($): " << bet << "\n\n";
+                        // balance updates
+                        balance1 += bet;
+                        balance2 -= bet;
+                        cout << "New account balances are:\n"
+                             << "Player " << account1 << ": " << balance1 << "\nPlayer " << account2 << ": " << balance2;
+                        break;
+                    }
+
+                    sleep(1); // introduce a 1-second delay
+
+                    // Player 1's turn
+                    cout << "Player " << account1 << " rolls from: " << roll;
+                    roll = rand() % roll + 1;
+                    cout << ", rolling: " << roll << endl;
+
+                    if (roll == 1)
+                    {
+                        cout << "Player " << account2 << " wins ($): " << bet << "\n\n";
+                        // balance updates
+                        balance1 -= bet;
+                        balance2 += bet;
+                        cout << "New account balances are:\n"
+                             << "Player " << account1 << ": " << balance1 << "\nPlayer " << account2 << ": " << balance2;
+                        break;
+                    }
+
+                    sleep(1); // introduce a 1-second delay
+                }
+                updateAccountBalance(account1, balance1);
+                updateAccountBalance(account2, balance2);
+            }
+            else
+            {
+                // Loop
+                continue;
+            }
+        }
+
+        // request replay,
+        char replayKey;
+        cout << "\n\nDo you want to play again (Y/N): ";
+
+        while (true) // ensure user input is either Yy, Nn.
+        {
+            cin >> replayKey;
+            if (replayKey == 'Y' || replayKey == 'y' || replayKey == 'N' || replayKey == 'n')
+            {
+                break;
+            }
+            cout << "\nInvalid input. Please enter 'Y' or 'N': ";
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        }
+        if (replayKey == 'N' || replayKey == 'n')
+        {
+            break;
+        }
+        else
+        {
+            continue;
+        }
     }
-
-    cout << "Player 2 Account: " << account2 << ", Login successful\n\n";
-
-    int x;
-    cin >> x;
 
     return 0;
 }
