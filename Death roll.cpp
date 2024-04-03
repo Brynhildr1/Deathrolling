@@ -4,7 +4,7 @@
 #include <limits>
 #include <iomanip>
 #include <cctype>
-#include <unistd.h>
+#include <windows.h>
 #include <cstdlib>
 #include <ctime>
 

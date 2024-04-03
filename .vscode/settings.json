@@ -5,5 +5,6 @@
     "ostream": "cpp",
     "*.tcc": "cpp",
     "limits": "cpp"
-  }
+  },
+  "C_Cpp.errorSquiggles": "disabled"
 }
